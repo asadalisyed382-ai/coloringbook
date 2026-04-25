@@ -1,107 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scratch Painter - Fill & Stamp</title>
+<style>
+body { font-family: Arial; background: #2c3e50; padding: 20px; display: flex; justify-content: center; }
+.container { background: white; padding: 20px; border-radius: 24px; max-width: 1100px; }
+canvas { border: 3px solid #333; cursor: crosshair; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+.tools { margin: 15px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; border-bottom: 2px solid #ddd; padding-bottom: 12px; }
+.tool-btn { padding: 8px 16px; font-size: 15px; cursor: pointer; border: none; border-radius: 8px; background: #ecf0f1; font-weight: bold; }
+.tool-btn.active { background: #3498db; color: white; box-shadow: 0 0 0 2px gold; }
+.color-btn { width: 42px; height: 42px; border-radius: 50%; border: 2px solid #333; cursor: pointer; margin: 2px; }
+.color-btn.active { border: 4px solid gold; transform: scale(1.1); }
+.image-gallery { margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; background: #f8f9fa; padding: 12px; border-radius: 16px; min-height: 100px; }
+.gallery-img { width: 70px; border: 2px solid #ccc; border-radius: 8px; cursor: pointer; padding: 4px; background: white; }
+.status { background: #e9ecef; padding: 6px 12px; border-radius: 20px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="container">
+<h2>🎨 Scratch Painter — Fill + Stamp</h2>
+<div class="tools">
+<button id="brushTool" class="tool-btn active">🖌️ Brush</button>
+<button id="fillTool" class="tool-btn">🎨 Fill</button>
+<button id="stampTool" class="tool-btn">📌 Stamp</button>
+<div id="colorRed" class="color-btn active" data-color="#e74c3c" style="background:#e74c3c"></div>
+<div id="colorBlue" class="color-btn" data-color="#3498db" style="background:#3498db"></div>
+<div id="colorGreen" class="color-btn" data-color="#2ecc71" style="background:#2ecc71"></div>
+<input type="range" id="brushSize" min="2" max="30" value="8">
+<span id="sizeValue">8px</span>
+<button id="clearBtn">🗑️ Clear</button>
+<button id="saveBtn">💾 Save</button>
+<span class="status" id="statusMsg">🖌️ Brush mode</span>
+</div>
+<canvas id="canvas" width="700" height="500"></canvas>
+<input type="file" id="imageUpload" multiple accept="image/*">
+<div id="gallery" class="image-gallery"></div>
+</div>
+
 <script>
 const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
 let currentTool = 'brush';
 let currentColor = '#e74c3c';
 let brushSize = 8;
 let drawing = false;
-let stampImages = [];
 let selectedStampImg = null;
-let stampSize = 60;
 
 function initCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'white';
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.beginPath();
 }
 initCanvas();
 
-function floodFill(x, y, fillColor) {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const targetColor = getColorAtPixel(imageData, x, y);
-    const fillRGB = hexToRgb(fillColor);
-
-    if (colorsMatch(targetColor, fillRGB)) return;
-
-    const stack = [{x, y}];
-    const visited = new Set();
-
-    while (stack.length) {
-        const pixel = stack.pop();
-        const px = pixel.x;
-        const py = pixel.y;
-
-        if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue;
-
-        const key = `${px},${py}`;
-        if (visited.has(key)) continue;
-
-        const currentPixelColor = getColorAtPixel(imageData, px, py);
-
-        if (!colorsMatch(currentPixelColor, targetColor)) continue;
-
-        visited.add(key);
-        setPixel(imageData, px, py, fillRGB);
-
-        stack.push(
-            {x: px + 1, y: py},
-            {x: px - 1, y: py},
-            {x: px, y: py + 1},
-            {x: px, y: py - 1}
-        );
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-}
-
-function getColorAtPixel(imageData, x, y) {
-    const index = (y * imageData.width + x) * 4;
+function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     return {
-        r: imageData.data[index],
-        g: imageData.data[index + 1],
-        b: imageData.data[index + 2],
-        a: imageData.data[index + 3]
+        x: Math.floor((clientX - rect.left) * (canvas.width / rect.width)),
+        y: Math.floor((clientY - rect.top) * (canvas.height / rect.height))
     };
-}
-
-function setPixel(imageData, x, y, rgb) {
-    const index = (y * imageData.width + x) * 4;
-    imageData.data[index] = rgb.r;
-    imageData.data[index + 1] = rgb.g;
-    imageData.data[index + 2] = rgb.b;
-    imageData.data[index + 3] = 255;
-}
-
-function colorsMatch(c1, c2) {
-    return (
-        Math.abs(c1.r - c2.r) < 5 &&
-        Math.abs(c1.g - c2.g) < 5 &&
-        Math.abs(c1.b - c2.b) < 5
-    );
-}
-
-function hexToRgb(color) {
-    if (color.startsWith('rgb')) {
-        const nums = color.match(/\d+/g);
-        return {
-            r: parseInt(nums[0]),
-            g: parseInt(nums[1]),
-            b: parseInt(nums[2])
-        };
-    }
-
-    if (color.startsWith('#')) {
-        color = color.slice(1);
-        return {
-            r: parseInt(color.slice(0, 2), 16),
-            g: parseInt(color.slice(2, 4), 16),
-            b: parseInt(color.slice(4, 6), 16)
-        };
-    }
-
-    return {r: 0, g: 0, b: 0};
 }
 
 function drawBrush(x, y) {
@@ -111,206 +73,131 @@ function drawBrush(x, y) {
     ctx.fill();
 }
 
-function placeStamp(x, y) {
-    if (!selectedStampImg) {
-        document.getElementById('statusMsg').innerText =
-            '⚠️ First click a Scratch image in gallery!';
-        setTimeout(updateStatusMsg, 1500);
-        return;
-    }
-
-    const width = stampSize;
-    const height = stampSize * (selectedStampImg.height / selectedStampImg.width);
-
-    ctx.drawImage(
-        selectedStampImg,
-        x - width / 2,
-        y - height / 2,
-        width,
-        height
-    );
-
-    document.getElementById('statusMsg').innerText = '📌 Stamped!';
-    setTimeout(updateStatusMsg, 800);
-}
-
-function updateStatusMsg() {
-    if (currentTool === 'brush') {
-        document.getElementById('statusMsg').innerHTML = '🖌️ Brush mode';
-    } else if (currentTool === 'fill') {
-        document.getElementById('statusMsg').innerHTML = '🎨 Fill mode';
-    } else {
-        document.getElementById('statusMsg').innerHTML = '📌 Stamp mode';
-    }
-}
-
-function getCanvasPosition(e) {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-
-    let clientX, clientY;
-
-    if (e.touches) {
-        clientX = e.touches[0].clientX;
-        clientY = e.touches[0].clientY;
-    } else {
-        clientX = e.clientX;
-        clientY = e.clientY;
-    }
-
+function hexToRgb(hex) {
+    hex = hex.replace('#', '');
     return {
-        x: Math.min(Math.max(0, (clientX - rect.left) * scaleX), canvas.width - 1),
-        y: Math.min(Math.max(0, (clientY - rect.top) * scaleY), canvas.height - 1)
+        r: parseInt(hex.substring(0, 2), 16),
+        g: parseInt(hex.substring(2, 4), 16),
+        b: parseInt(hex.substring(4, 6), 16)
     };
 }
 
-function handleCanvasClick(e) {
-    const pos = getCanvasPosition(e);
+function floodFill(x, y, fillColor) {
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = img.data;
+    const fill = hexToRgb(fillColor);
 
-    if (currentTool === 'fill') {
-        floodFill(Math.floor(pos.x), Math.floor(pos.y), currentColor);
+    const idx = (y * canvas.width + x) * 4;
+    const target = {
+        r: data[idx],
+        g: data[idx+1],
+        b: data[idx+2]
+    };
+
+    if (target.r === fill.r && target.g === fill.g && target.b === fill.b) return;
+
+    const stack = [[x,y]];
+
+    while (stack.length) {
+        const [cx, cy] = stack.pop();
+        if (cx < 0 || cy < 0 || cx >= canvas.width || cy >= canvas.height) continue;
+
+        const i = (cy * canvas.width + cx) * 4;
+        if (
+            data[i] !== target.r ||
+            data[i+1] !== target.g ||
+            data[i+2] !== target.b
+        ) continue;
+
+        data[i] = fill.r;
+        data[i+1] = fill.g;
+        data[i+2] = fill.b;
+        data[i+3] = 255;
+
+        stack.push([cx+1, cy]);
+        stack.push([cx-1, cy]);
+        stack.push([cx, cy+1]);
+        stack.push([cx, cy-1]);
+    }
+
+    ctx.putImageData(img, 0, 0);
+}
+
+function placeStamp(x, y) {
+    if (!selectedStampImg) return;
+    ctx.drawImage(selectedStampImg, x - 30, y - 30, 60, 60);
+}
+
+canvas.addEventListener('mousedown', e => {
+    const pos = getPos(e);
+    if (currentTool === 'brush') {
+        drawing = true;
+        drawBrush(pos.x, pos.y);
+    } else if (currentTool === 'fill') {
+        floodFill(pos.x, pos.y, currentColor);
     } else if (currentTool === 'stamp') {
         placeStamp(pos.x, pos.y);
     }
-}
-
-function handleCanvasMove(e) {
-    if (currentTool !== 'brush' || !drawing) return;
-
-    const pos = getCanvasPosition(e);
-    drawBrush(pos.x, pos.y);
-}
-
-canvas.addEventListener('mousedown', (e) => {
-    if (currentTool === 'brush') {
-        drawing = true;
-        const pos = getCanvasPosition(e);
-        drawBrush(pos.x, pos.y);
-    } else {
-        handleCanvasClick(e);
-    }
 });
 
-canvas.addEventListener('mousemove', handleCanvasMove);
+canvas.addEventListener('mousemove', e => {
+    if (!drawing || currentTool !== 'brush') return;
+    const pos = getPos(e);
+    drawBrush(pos.x, pos.y);
+});
+
 canvas.addEventListener('mouseup', () => drawing = false);
 canvas.addEventListener('mouseleave', () => drawing = false);
 
-canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-
-    if (currentTool === 'brush') {
-        drawing = true;
-        const pos = getCanvasPosition(e);
-        drawBrush(pos.x, pos.y);
-    } else {
-        handleCanvasClick(e);
-    }
-});
-
-canvas.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    handleCanvasMove(e);
-});
-
-canvas.addEventListener('touchend', () => drawing = false);
-
-document.getElementById('brushTool').onclick = () => {
-    currentTool = 'brush';
-    updateStatusMsg();
-    highlightTool('brushTool');
-};
-
-document.getElementById('fillTool').onclick = () => {
-    currentTool = 'fill';
-    updateStatusMsg();
-    highlightTool('fillTool');
-};
-
-document.getElementById('stampTool').onclick = () => {
-    currentTool = 'stamp';
-    updateStatusMsg();
-    highlightTool('stampTool');
-};
-
-function highlightTool(activeId) {
-    ['brushTool', 'fillTool', 'stampTool'].forEach(id => {
-        document.getElementById(id).classList.remove('active');
-    });
-
-    document.getElementById(activeId).classList.add('active');
-}
-
 document.querySelectorAll('.color-btn').forEach(btn => {
     btn.onclick = () => {
-        currentColor = getComputedStyle(btn).backgroundColor;
-
-        document.querySelectorAll('.color-btn').forEach(b => {
-            b.classList.remove('active');
-        });
-
+        currentColor = btn.dataset.color;
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
     };
 });
 
-document.getElementById('brushSize').oninput = function () {
+document.getElementById('brushSize').oninput = function() {
     brushSize = parseInt(this.value);
     document.getElementById('sizeValue').innerText = brushSize + 'px';
 };
 
-document.getElementById('stampSize').oninput = function () {
-    stampSize = parseInt(this.value);
-    document.getElementById('stampSizeValue').innerText = stampSize + 'px';
-};
-
+document.getElementById('brushTool').onclick = () => currentTool = 'brush';
+document.getElementById('fillTool').onclick = () => currentTool = 'fill';
+document.getElementById('stampTool').onclick = () => currentTool = 'stamp';
 document.getElementById('clearBtn').onclick = initCanvas;
 
-document.getElementById('saveBtn').onclick = function () {
+document.getElementById('saveBtn').onclick = () => {
     const link = document.createElement('a');
     link.download = 'scratch_painting.png';
     link.href = canvas.toDataURL('image/png');
     link.click();
 };
 
-const uploadInput = document.getElementById('imageUpload');
-const gallery = document.getElementById('gallery');
-
-uploadInput.addEventListener('change', function (event) {
+document.getElementById('imageUpload').addEventListener('change', function(e) {
+    const gallery = document.getElementById('gallery');
     gallery.innerHTML = '';
-    stampImages = [];
 
-    Array.from(event.target.files).forEach(file => {
+    [...e.target.files].forEach(file => {
         const reader = new FileReader();
-
-        reader.onload = function (e) {
+        reader.onload = function(ev) {
             const img = new Image();
+            img.src = ev.target.result;
 
-            img.onload = function () {
-                stampImages.push(img);
+            const thumb = document.createElement('img');
+            thumb.src = ev.target.result;
+            thumb.className = 'gallery-img';
 
-                const thumb = document.createElement('img');
-                thumb.src = e.target.result;
-                thumb.className = 'gallery-img';
-
-                thumb.onclick = function () {
-                    selectedStampImg = img;
-                    document.getElementById('stampPreviewText').innerHTML =
-                        `✅ Ready: ${file.name}`;
-
-                    currentTool = 'stamp';
-                    updateStatusMsg();
-                    highlightTool('stampTool');
-                };
-
-                gallery.appendChild(thumb);
+            thumb.onclick = () => {
+                selectedStampImg = img;
+                currentTool = 'stamp';
             };
 
-            img.src = e.target.result;
+            gallery.appendChild(thumb);
         };
-
         reader.readAsDataURL(file);
     });
 });
-
-updateStatusMsg();
 </script>
+</body>
+</html>
